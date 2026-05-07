@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPECTRA — Music Visualizer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:'Inter',system-ui,sans-serif}
+#c{position:fixed;inset:0;width:100%;height:100%}
+
+/* ── Dropzone overlay ── */
+#dropzone{
+  position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  z-index:10;transition:opacity .5s,visibility .5s;
+  background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);
+}
+#dropzone.gone{opacity:0;visibility:hidden;pointer-events:none}
+
+/* ── Card ── */
+.card{
+  background:#0f0b1e;
+  border:1px solid rgba(140,100,255,0.35);
+  border-radius:20px;
+  width:92%;max-width:500px;
+  overflow:hidden;
+  box-shadow:0 0 0 1px rgba(0,0,0,.5), 0 30px 80px rgba(0,0,0,.8), 0 0 60px rgba(120,60,255,0.2);
+}
+.card.drag{border-color:rgba(140,100,255,0.8);box-shadow:0 0 80px rgba(120,60,255,0.45)}
+
+/* Card header */
+.card-head{
+  padding:28px 28px 20px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  background:linear-gradient(160deg,rgba(120,60,255,0.12) 0%,transparent 60%);
+}
+.logo{
+  font-size:26px;font-weight:800;letter-spacing:-0.5px;color:#fff;
+  display:flex;align-items:center;gap:10px;margin-bottom:4px;
+}
+.logo-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:linear-gradient(135deg,#a855f7,#6366f1);
+  box-shadow:0 0 10px #a855f7;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 8px #a855f7}50%{box-shadow:0 0 18px #a855f7,0 0 30px #6366f1}}
+.tagline{font-size:12px;color:rgba(255,255,255,0.38);letter-spacing:.3px}
+
+/* ── Search section ── */
+.section{padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.section-label{
+  font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:rgba(168,85,247,0.8);margin-bottom:10px;
+}
+
+.search-row{display:flex;gap:8px}
+#search-input{
+  flex:1;min-width:0;
+  background:#1a1427;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px;
+  color:#fff;font-size:13px;font-family:inherit;
+  padding:11px 14px;outline:none;
+  transition:border-color .2s,background .2s;
+}
+#search-input::placeholder{color:rgba(255,255,255,0.28)}
+#search-input:focus{border-color:rgba(168,85,247,0.7);background:#1e1830}
+#search-btn{
+  flex-shrink:0;
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);
+  border:none;border-radius:10px;
+  color:#fff;font-size:14px;font-weight:700;
+  padding:0 18px;cursor:pointer;
+  transition:opacity .2s,transform .1s;
+  white-space:nowrap;
+}
+#search-btn:hover{opacity:.88}
+#search-btn:active{transform:scale(.97)}
+
+#search-status{
+  font-size:11px;color:rgba(255,255,255,0.35);
+  margin-top:8px;min-height:14px;line-height:1.4;
+}
+#search-status.err{color:#f87171}
+
+/* Results list */
+#search-results{
+  display:none;flex-direction:column;
+  margin-top:10px;
+  background:#120f1e;
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:12px;
+  overflow:hidden;
+  max-height:240px;overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:rgba(140,100,255,0.4) transparent;
+}
+#search-results.open{display:flex}
+#search-results::-webkit-scrollbar{width:4px}
+#search-results::-webkit-scrollbar-thumb{background:rgba(140,100,255,0.4);border-radius:2px}
+
+.track{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 14px;cursor:pointer;
+  transition:background .12s;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+}
+.track:last-child{border-bottom:none}
+.track:hover{background:rgba(120,60,255,0.2)}
+.track.playing{background:rgba(120,60,255,0.15)}
+
+.track-num{
+  width:18px;text-align:center;
+  font-size:11px;color:rgba(255,255,255,0.25);flex-shrink:0;
+}
+.track.playing .track-num{color:#a855f7}
+
+.track img{
+  width:40px;height:40px;border-radius:6px;
+  object-fit:cover;flex-shrink:0;
+  background:#1e1830;
+}
+.track-info{flex:1;min-width:0}
+.track-title{
+  font-size:13px;font-weight:600;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.track-artist{
+  font-size:11px;color:rgba(255,255,255,0.4);
+  margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.track-dur{
+  font-size:11px;color:rgba(168,85,247,0.7);
+  flex-shrink:0;font-variant-numeric:tabular-nums;
+}
+
+/* ── URL section ── */
+.url-row{display:flex;gap:8px}
+#url-input{
+  flex:1;min-width:0;
+  background:#1a1427;border:1px solid rgba(255,255,255,0.1);
+  border-radius:10px;color:#fff;font-size:12px;font-family:inherit;
+  padding:10px 13px;outline:none;transition:border-color .2s;
+}
+#url-input::placeholder{color:rgba(255,255,255,0.22)}
+#url-input:focus{border-color:rgba(168,85,247,0.6)}
+#url-go{
+  flex-shrink:0;
+  background:#1e1830;border:1px solid rgba(168,85,247,0.4);
+  color:rgba(200,170,255,0.95);padding:10px 18px;
+  border-radius:10px;font-size:12px;font-weight:700;font-family:inherit;
+  cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+#url-go:hover{background:rgba(120,60,255,0.35);color:#fff;border-color:rgba(168,85,247,0.7)}
+#url-error{font-size:11px;color:#f87171;margin-top:7px;min-height:14px;line-height:1.4}
+
+/* ── Bottom actions ── */
+.card-foot{
+  padding:18px 28px;
+  display:flex;gap:10px;align-items:center;
+  background:rgba(0,0,0,0.25);
+}
+.btn{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:#1a1427;border:1px solid rgba(255,255,255,0.1);
+  color:rgba(255,255,255,0.75);padding:11px 14px;border-radius:10px;
+  font-size:12px;font-weight:600;font-family:inherit;
+  cursor:pointer;transition:all .2s;
+}
+.btn:hover{background:#231c38;border-color:rgba(168,85,247,0.4);color:#fff}
+.btn.accent{
+  background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(79,70,229,.35));
+  border-color:rgba(168,85,247,0.4);color:rgba(210,190,255,0.95);
+}
+.btn.accent:hover{background:linear-gradient(135deg,rgba(124,58,237,.55),rgba(79,70,229,.55));color:#fff}
+
+#file-input{display:none}
+
+/* ── Pill (now playing) ── */
+#pill{
+  position:fixed;bottom:20px;right:20px;z-index:20;
+  display:flex;align-items:center;gap:10px;
+  background:#0f0b1e;
+  border:1px solid rgba(140,100,255,0.35);
+  border-radius:100px;padding:8px 16px 8px 8px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.6);
+  opacity:0;transition:opacity .5s;max-width:300px;pointer-events:none;
+}
+#pill.show{opacity:1;pointer-events:auto}
+#pill-btn{
+  width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);
+  border:none;color:#fff;cursor:pointer;font-size:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .2s;box-shadow:0 0 10px rgba(120,60,255,0.5);
+}
+#pill-btn:hover{opacity:.8}
+#pill-name{font-size:11px;color:rgba(255,255,255,0.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+
+#hint{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  color:rgba(255,255,255,0.15);font-size:11px;z-index:20;
+  opacity:0;transition:opacity .5s;pointer-events:none;letter-spacing:.5px;
+}
+#hint.show{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="dropzone">
+  <div class="card" id="card">
+
+    <!-- Header -->
+    <div class="card-head">
+      <div class="logo"><div class="logo-dot"></div>SPECTRA</div>
+      <div class="tagline">Music Visualizer — search, drop, or paste a URL</div>
+    </div>
+
+    <!-- Search section -->
+    <div class="section">
+      <div class="section-label">Search Online</div>
+      <div class="search-row">
+        <input id="search-input" type="text" placeholder="Artist, song name, album…" spellcheck="false" autocomplete="off">
+        <button id="search-btn">Search</button>
+      </div>
+      <div id="search-status"></div>
+      <div id="search-results"></div>
+    </div>
+
+    <!-- URL section -->
+    <div class="section">
+      <div class="section-label">Direct URL</div>
+      <div class="url-row">
+        <input id="url-input" type="url" placeholder="https://example.com/song.mp3" spellcheck="false">
+        <button id="url-go">Play</button>
+      </div>
+      <div id="url-error"></div>
+    </div>
+
+    <!-- Footer actions -->
+    <div class="card-foot">
+      <button class="btn" id="file-btn">&#128193;&nbsp; Browse File</button>
+      <button class="btn accent" id="demo-btn">&#9654;&nbsp; Demo Beat</button>
+    </div>
+
+    <input type="file" id="file-input" accept="audio/*">
+  </div>
+</div>
+
+<div id="pill">
+  <button id="pill-btn">&#9646;&#9646;</button>
+  <span id="pill-name">—</span>
+</div>
+<div id="hint">tap to pause</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ── AUDIO ─────────────────────────────────────────────────────────────────────
+let actx, analyser, srcNode, demoHandles = [];
+let playing = false, hasAudio = false;
+const FFT = 2048;
+const freqBuf = new Uint8Array(FFT);
+
+const A = { bass:0, mid:0, high:0, beatStrength:0, beat:false, hue:0 };
+let beatAvg = 0, lastBeat = 0;
+
+function initAudio() {
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = actx.createAnalyser();
+  analyser.fftSize = FFT;
+  analyser.smoothingTimeConstant = 0.82;
+  analyser.connect(actx.destination);
+}
+
+function band(lo, hi) {
+  const nyq = actx.sampleRate / 2;
+  const bin = nyq / (FFT / 2);
+  const s = Math.floor(lo / bin), e = Math.min(Math.floor(hi / bin), freqBuf.length - 1);
+  let sum = 0;
+  for (let i = s; i <= e; i++) sum += freqBuf[i];
+  return sum / ((e - s + 1) * 255);
+}
+
+function tickAudio() {
+  if (!analyser || !playing) return;
+  analyser.getByteFrequencyData(freqBuf);
+  A.bass  = band(20,   200);
+  A.mid   = band(200,  2000);
+  A.high  = band(2000, 20000);
+  A.hue   = (A.hue + (0.0005 + A.high * 0.003)) % 1;
+
+  beatAvg = beatAvg * 0.94 + A.bass * 0.06;
+  const now = performance.now();
+  A.beat = A.bass > beatAvg * 1.45 && (now - lastBeat) > 110;
+  if (A.beat) { lastBeat = now; A.beatStrength = A.bass; }
+}
+
+async function loadFile(file) {
+  initAudio();
+  if (actx.state === 'suspended') actx.resume();
+  stopDemo();
+  if (srcNode) { try { srcNode.stop(); } catch(_){} srcNode.disconnect(); }
+  const ab = await file.arrayBuffer();
+  const buf = await actx.decodeAudioData(ab);
+  srcNode = actx.createBufferSource();
+  srcNode.buffer = buf;
+  srcNode.loop = true;
+  srcNode.connect(analyser);
+  srcNode.start();
+  playing = true;
+  showPlayer(file.name.replace(/\.[^.]+$/, ''));
+}
+
+function startDemo() {
+  initAudio();
+  if (actx.state === 'suspended') actx.resume();
+  playing = true;
+  showPlayer('DEMO BEAT — 128 BPM');
+
+  const BPM = 128, step = 60000 / BPM / 2;
+
+  function kick() {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.connect(g); g.connect(analyser);
+    const t = actx.currentTime;
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 0.25);
+    g.gain.setValueAtTime(2.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    o.start(t); o.stop(t + 0.29);
+  }
+
+  function snare() {
+    const sz = Math.ceil(actx.sampleRate * 0.08);
+    const nb = actx.createBuffer(1, sz, actx.sampleRate);
+    const d = nb.getChannelData(0);
+    for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
+    const s = actx.createBufferSource();
+    const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 0.7;
+    const g = actx.createGain();
+    s.buffer = nb; s.connect(f); f.connect(g); g.connect(analyser);
+    const t = actx.currentTime;
+    g.gain.setValueAtTime(0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    s.start(t);
+  }
+
+  function hat(loud) {
+    const sz = Math.ceil(actx.sampleRate * 0.04);
+    const nb = actx.createBuffer(1, sz, actx.sampleRate);
+    const d = nb.getChannelData(0);
+    for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
+    const s = actx.createBufferSource();
+    const f = actx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 9000;
+    const g = actx.createGain();
+    s.buffer = nb; s.connect(f); f.connect(g); g.connect(analyser);
+    const t = actx.currentTime;
+    g.gain.setValueAtTime(loud ? 0.5 : 0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    s.start(t);
+  }
+
+  const notes = [55, 55, 65, 55, 49, 55, 73, 55];
+  function bass(note) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 350;
+    o.type = 'sawtooth'; o.frequency.value = note;
+    o.connect(f); f.connect(g); g.connect(analyser);
+    const t = actx.currentTime;
+    g.gain.setValueAtTime(0.6, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.start(t); o.stop(t + 0.18);
+  }
+
+  let count = 0;
+  function tick() {
+    if (!playing) return;
+    const beat = count % 8;
+    if (beat === 0 || beat === 4) kick();
+    if (beat === 2 || beat === 6) snare();
+    hat(beat % 2 === 0);
+    if (beat % 2 === 1) bass(notes[beat]);
+    count++;
+    const h = setTimeout(tick, step);
+    demoHandles.push(h);
+  }
+  tick();
+}
+
+function stopDemo() {
+  demoHandles.forEach(clearTimeout);
+  demoHandles = [];
+}
+
+function togglePlay() {
+  if (!actx) return;
+  if (actx.state === 'running') {
+    actx.suspend(); playing = false;
+    document.getElementById('pill-btn').innerHTML = '&#9654;';
+  } else {
+    actx.resume(); playing = true;
+    document.getElementById('pill-btn').innerHTML = '&#9646;&#9646;';
+  }
+}
+
+function showPlayer(name) {
+  hasAudio = true;
+  document.getElementById('pill-name').textContent = name;
+  document.getElementById('pill').classList.add('show');
+  document.getElementById('hint').classList.add('show');
+  document.getElementById('dropzone').classList.add('gone');
+}
+
+const PROXY = 'https://corsproxy.io/?';
+
+function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
+async function loadUrl(url) {
+  const errEl = document.getElementById('url-error');
+  const goBtn = document.getElementById('url-go');
+  errEl.textContent = '';
+  url = url.trim();
+  if (!url) return;
+
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    errEl.textContent = 'URL must start with http:// or https://';
+    return;
+  }
+
+  initAudio();
+  if (actx.state === 'suspended') actx.resume();
+  stopDemo();
+  if (srcNode) { try { srcNode.stop(); } catch(_){} srcNode.disconnect(); srcNode = null; }
+
+  goBtn.disabled = true;
+
+  // Step 1 — try direct fetch
+  let arrayBuffer = null;
+  errEl.textContent = 'Fetching…';
+  try {
+    const res = await fetchWithTimeout(url, 8000);
+    if (!res.ok) throw new Error('bad status');
+    arrayBuffer = await res.arrayBuffer();
+  } catch (_) {
+    // Step 2 — retry via CORS proxy
+    errEl.textContent = 'Trying proxy…';
+    try {
+      const res = await fetchWithTimeout(PROXY + encodeURIComponent(url), 20000);
+      if (!res.ok) throw new Error('proxy bad status');
+      arrayBuffer = await res.arrayBuffer();
+    } catch (e2) {
+      errEl.textContent = e2.name === 'AbortError'
+        ? '✕ Timed out. The file may be too large or the URL unreachable.'
+        : '✕ Could not fetch audio. Make sure the URL is a direct audio file (.mp3 / .wav / .ogg).';
+      goBtn.disabled = false;
+      return;
+    }
+  }
+
+  // Step 3 — decode
+  try {
+    errEl.textContent = 'Decoding…';
+    const audioBuf = await actx.decodeAudioData(arrayBuffer);
+    srcNode = actx.createBufferSource();
+    srcNode.buffer = audioBuf;
+    srcNode.loop = true;
+    srcNode.connect(analyser);
+    srcNode.start();
+    playing = true;
+    errEl.textContent = '';
+    const name = decodeURIComponent(url.split('/').pop().split('?')[0].split('#')[0]) || 'Audio';
+    showPlayer(name);
+  } catch (_) {
+    errEl.textContent = '✕ Could not decode audio. The URL may not point to a supported audio format.';
+  }
+
+  goBtn.disabled = false;
+}
+
+// ── DEEZER SEARCH ─────────────────────────────────────────────────────────────
+
+async function searchTracks(q) {
+  const api = `https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10&output=json`;
+  const res = await fetchWithTimeout(PROXY + encodeURIComponent(api), 12000);
+  if (!res.ok) throw new Error('Search failed');
+  const json = await res.json();
+  return json.data || [];
+}
+
+function fmtTime(s) {
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
+function renderResults(tracks) {
+  const box = document.getElementById('search-results');
+  box.innerHTML = '';
+  if (!tracks.length) {
+    box.classList.remove('open');
+    document.getElementById('search-status').textContent = 'No results found.';
+    return;
+  }
+  box.classList.add('open');
+  setStatus('');
+  tracks.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'track';
+    el.dataset.id = t.id;
+    el.innerHTML = `
+      <div class="track-num">${i + 1}</div>
+      <img src="${t.album.cover_small}" loading="lazy" alt="">
+      <div class="track-info">
+        <div class="track-title">${t.title}</div>
+        <div class="track-artist">${t.artist.name}</div>
+      </div>
+      <span class="track-dur">${fmtTime(t.duration)}</span>`;
+    el.addEventListener('click', e => { e.stopPropagation(); playTrack(t); });
+    box.appendChild(el);
+  });
+}
+
+function setStatus(msg, isErr = false) {
+  const el = document.getElementById('search-status');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : '';
+}
+
+async function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+  setStatus('Searching…');
+  document.getElementById('search-results').classList.remove('open');
+  try {
+    const tracks = await searchTracks(q);
+    renderResults(tracks);
+    if (!tracks.length) setStatus('No results found.');
+  } catch(_) {
+    setStatus('Search failed. Check your connection.', true);
+  }
+}
+
+async function playTrack(t) {
+  if (!t.preview) {
+    setStatus('✕ No preview available for this track.', true);
+    return;
+  }
+  setStatus(`Loading "${t.title}"…`);
+
+  // Highlight selected row
+  document.querySelectorAll('.track').forEach(el => el.classList.remove('playing'));
+  const rows = document.querySelectorAll('.track');
+  rows.forEach(el => { if (el.dataset.id == t.id) el.classList.add('playing'); });
+
+  initAudio();
+  if (actx.state === 'suspended') actx.resume();
+  stopDemo();
+  if (srcNode) { try { srcNode.stop(); } catch(_){} srcNode.disconnect(); srcNode = null; }
+
+  try {
+    let ab;
+    try {
+      const r = await fetchWithTimeout(t.preview, 8000);
+      ab = await r.arrayBuffer();
+    } catch(_) {
+      const r = await fetchWithTimeout(PROXY + encodeURIComponent(t.preview), 15000);
+      ab = await r.arrayBuffer();
+    }
+    const buf = await actx.decodeAudioData(ab);
+    srcNode = actx.createBufferSource();
+    srcNode.buffer = buf;
+    srcNode.loop = true;
+    srcNode.connect(analyser);
+    srcNode.start();
+    playing = true;
+    setStatus('');
+    showPlayer(`${t.artist.name} — ${t.title}`);
+  } catch(_) {
+    setStatus('✕ Could not load track. Try another.', true);
+  }
+}
+
+// ── RENDERER ──────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+let W = window.innerWidth, H = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(W, H);
+renderer.autoClear = false;
+
+// Main scene
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, W / H, 0.01, 500);
+camera.position.set(0, 0, 5);
+
+// Render target for post-processing
+let RT = new THREE.WebGLRenderTarget(W, H, {
+  minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat
+});
+
+// ── SHADER SOURCES ────────────────────────────────────────────────────────────
+
+const NOISE_GLSL = `
+float hash(vec3 p){p=fract(p*0.31831+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float vnoise(vec3 p){
+  vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(
+    mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+    mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),
+  f.z);}
+float fbm(vec3 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*vnoise(p);p*=2.1;a*=.5;}return v;}
+`;
+
+const ICO_VERT = `
+uniform float uTime;
+uniform float uBass;
+uniform float uMid;
+uniform float uHigh;
+varying vec3 vNorm;
+varying float vDisp;
+varying vec3 vPos;
+
+${NOISE_GLSL}
+
+void main(){
+  vNorm = normalize(normalMatrix * normal);
+  float n = fbm(normal * 2.5 + uTime * 0.22);
+  float d = n * (uBass * 1.8 + 0.12) + uMid * 0.25 * sin(uTime * 1.8 + position.y * 5.0);
+  vDisp = d;
+  vec3 np = position + normal * d;
+  vPos = np;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(np, 1.0);
+}`;
+
+const ICO_FRAG = `
+uniform float uTime;
+uniform float uBass;
+uniform float uHigh;
+uniform float uHue;
+varying vec3 vNorm;
+varying float vDisp;
+varying vec3 vPos;
+
+vec3 hsv(float h,float s,float v){
+  vec4 K=vec4(1.,2./3.,1./3.,3.);
+  vec3 p=abs(fract(vec3(h)+K.xyz)*6.-K.www);
+  return v*mix(K.xxx,clamp(p-K.xxx,0.,1.),s);
+}
+
+void main(){
+  float h = uHue + vDisp * 0.6 + uHigh * 0.4 + vPos.y * 0.05;
+  vec3 col = hsv(h, 0.85, 1.0);
+  float em = abs(vDisp) * 3.0 + uBass * 0.8 + 0.3;
+  float rim = pow(1.0 - abs(dot(vNorm, vec3(0,0,1))), 2.5);
+  col = col * em + col * rim * 2.0;
+  gl_FragColor = vec4(col, 0.85);
+}`;
+
+const PART_VERT = `
+uniform float uSize;
+attribute float aScale;
+attribute vec3 aColor;
+varying vec3 vCol;
+void main(){
+  vCol = aColor;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_PointSize = max(1.0, uSize * aScale * (280.0 / -mv.z));
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const PART_FRAG = `
+varying vec3 vCol;
+void main(){
+  vec2 c = gl_PointCoord - .5;
+  float d = length(c);
+  if(d > .5) discard;
+  float a = 1.0 - d * 2.0; a = a * a;
+  gl_FragColor = vec4(vCol * 2.5, a);
+}`;
+
+const POST_VERT = `
+varying vec2 vUv;
+void main(){ vUv = uv; gl_Position = vec4(position, 1.0); }`;
+
+const POST_FRAG = `
+uniform sampler2D tDiffuse;
+uniform float uTime;
+uniform float uBass;
+uniform float uGlitch;
+uniform float uSeg;
+uniform vec2 uRes;
+varying vec2 vUv;
+#define PI 3.14159265358979
+
+void main(){
+  vec2 uv = vUv;
+  vec2 cen = uv - .5;
+
+  // Slow rotation
+  float rot = uTime * 0.07;
+  float cr = cos(rot), sr = sin(rot);
+  cen = vec2(cr*cen.x - sr*cen.y, sr*cen.x + cr*cen.y);
+
+  // Kaleidoscope
+  float r = length(cen);
+  float a = atan(cen.y, cen.x);
+  float seg = uSeg;
+  float slice = 2.0 * PI / seg;
+  a = mod(a, slice);
+  a = abs(a - slice * .5);
+  cen = vec2(cos(a), sin(a)) * r;
+  vec2 kuv = cen + .5;
+  kuv = clamp(kuv, .001, .999);
+
+  // Chromatic aberration
+  float ab = uGlitch * 0.015 + uBass * 0.004 + 0.001;
+  vec2 dir = normalize(cen + .0001) * ab;
+  float rc = texture2D(tDiffuse, kuv + dir * 1.8).r;
+  float gc = texture2D(tDiffuse, kuv).g;
+  float bc = texture2D(tDiffuse, kuv - dir * 1.8).b;
+  vec4 col = vec4(rc, gc, bc, 1.0);
+
+  // Bloom: star-pattern sampling
+  float bstr = 0.0015 + uBass * 0.007;
+  vec4 bloom = vec4(0);
+  for(int i = 0; i < 8; i++){
+    float ba = float(i) * PI * 0.25;
+    for(int j = 1; j <= 5; j++){
+      float bd = bstr * float(j) * 1.4;
+      vec2 off = vec2(cos(ba), sin(ba)) * bd;
+      vec4 s = texture2D(tDiffuse, clamp(kuv + off, .001, .999));
+      float lum = dot(s.rgb, vec3(0.299, 0.587, 0.114));
+      float w = max(lum - 0.35, 0.0) * (1.0 / float(j)) * 0.18;
+      bloom += s * w;
+    }
+  }
+  col += bloom;
+
+  // Glitch scanlines on beat
+  if(uGlitch > 0.3){
+    float ln = sin(uv.y * 180.0 + uTime * 60.0) * .5 + .5;
+    col.rgb += vec3(ln * 0.06 * uGlitch);
+    if(mod(floor(uv.y * uRes.y / 3.0), 2.0) < 1.0) col.rgb *= (1.0 - uGlitch * 0.15);
+  }
+
+  // Vignette
+  float vign = smoothstep(0.85, 0.15, r * 1.1);
+  col.rgb *= 0.5 + vign * 0.55;
+
+  gl_FragColor = col;
+}`;
+
+// ── GEOMETRY / MATERIALS ──────────────────────────────────────────────────────
+
+const icoUniforms = {
+  uTime:{ value:0 }, uBass:{ value:0 }, uMid:{ value:0 },
+  uHigh:{ value:0 }, uHue:{ value:0 }
+};
+
+const icoMat = new THREE.ShaderMaterial({
+  vertexShader: ICO_VERT, fragmentShader: ICO_FRAG,
+  uniforms: icoUniforms,
+  wireframe: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+
+const icoGeo = new THREE.IcosahedronGeometry(1.4, 5);
+const ico = new THREE.Mesh(icoGeo, icoMat);
+scene.add(ico);
+
+// Inner sphere (solid glow core)
+const coreUniforms = {
+  uTime:{ value:0 }, uBass:{ value:0 }, uMid:{ value:0 },
+  uHigh:{ value:0 }, uHue:{ value:0 }
+};
+const coreMat = new THREE.ShaderMaterial({
+  vertexShader: ICO_VERT, fragmentShader: ICO_FRAG,
+  uniforms: coreUniforms,
+  transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 4), coreMat);
+scene.add(core);
+
+// Torus knot
+const tkUniforms = {
+  uTime:{ value:0 }, uBass:{ value:0 }, uMid:{ value:0 },
+  uHigh:{ value:0 }, uHue:{ value:0.5 }
+};
+const tkMat = new THREE.ShaderMaterial({
+  vertexShader: ICO_VERT, fragmentShader: ICO_FRAG,
+  uniforms: tkUniforms,
+  wireframe: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+const tk = new THREE.Mesh(new THREE.TorusKnotGeometry(2.2, 0.14, 180, 12, 3, 5), tkMat);
+scene.add(tk);
+
+// ── PARTICLES ─────────────────────────────────────────────────────────────────
+
+const PC = 1200;
+const pPos  = new Float32Array(PC * 3);
+const pVel  = new Float32Array(PC * 3);
+const pCol  = new Float32Array(PC * 3);
+const pScl  = new Float32Array(PC);
+const pOrb  = new Float32Array(PC); // orbit radius per particle
+
+function hsv2rgb(h, s, v) {
+  const i = Math.floor(h * 6), f = h * 6 - i;
+  const p = v*(1-s), q = v*(1-f*s), t = v*(1-(1-f)*s);
+  const m = i % 6;
+  const lut = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]];
+  return lut[m];
+}
+
+function resetParticle(i) {
+  const i3 = i * 3;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const r = 1.8 + Math.random() * 1.4;
+  pOrb[i] = r;
+  pPos[i3]   = Math.sin(phi) * Math.cos(theta) * r;
+  pPos[i3+1] = Math.sin(phi) * Math.sin(theta) * r;
+  pPos[i3+2] = Math.cos(phi) * r * 0.4;
+  pVel[i3] = pVel[i3+1] = pVel[i3+2] = 0;
+  pScl[i] = 0.4 + Math.random() * 0.8;
+  const [rr,gg,bb] = hsv2rgb(Math.random(), 0.85, 1);
+  pCol[i3] = rr; pCol[i3+1] = gg; pCol[i3+2] = bb;
+}
+
+for (let i = 0; i < PC; i++) resetParticle(i);
+
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute('aColor',   new THREE.BufferAttribute(pCol, 3));
+pGeo.setAttribute('aScale',   new THREE.BufferAttribute(pScl, 1));
+
+const pMat = new THREE.ShaderMaterial({
+  vertexShader: PART_VERT, fragmentShader: PART_FRAG,
+  uniforms: { uSize: { value: 1.8 } },
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+});
+
+const particles = new THREE.Points(pGeo, pMat);
+scene.add(particles);
+
+// Tunnel particles (fly toward camera)
+const TC = 500;
+const tPos = new Float32Array(TC * 3);
+const tCol = new Float32Array(TC * 3);
+const tScl = new Float32Array(TC);
+const tSpd = new Float32Array(TC);
+
+for (let i = 0; i < TC; i++) {
+  const i3 = i * 3;
+  const ang = Math.random() * Math.PI * 2;
+  const rad = 3 + Math.random() * 8;
+  tPos[i3]   = Math.cos(ang) * rad;
+  tPos[i3+1] = Math.sin(ang) * rad;
+  tPos[i3+2] = -80 + Math.random() * 80;
+  tSpd[i] = 0.08 + Math.random() * 0.12;
+  tScl[i] = 0.2 + Math.random() * 0.5;
+  const [rr,gg,bb] = hsv2rgb(Math.random(), 0.6, 0.8);
+  tCol[i3] = rr; tCol[i3+1] = gg; tCol[i3+2] = bb;
+}
+
+const tGeo = new THREE.BufferGeometry();
+tGeo.setAttribute('position', new THREE.BufferAttribute(tPos, 3));
+tGeo.setAttribute('aColor',   new THREE.BufferAttribute(tCol, 3));
+tGeo.setAttribute('aScale',   new THREE.BufferAttribute(tScl, 1));
+
+const tunnel = new THREE.Points(tGeo, pMat);
+scene.add(tunnel);
+
+// ── POST-PROCESSING ───────────────────────────────────────────────────────────
+
+const postScene = new THREE.Scene();
+const postCam   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+const postUniforms = {
+  tDiffuse: { value: RT.texture },
+  uTime: { value: 0 }, uBass: { value: 0 },
+  uGlitch: { value: 0 }, uSeg: { value: 8.0 },
+  uRes: { value: new THREE.Vector2(W, H) }
+};
+
+const postMat = new THREE.ShaderMaterial({
+  vertexShader: POST_VERT, fragmentShader: POST_FRAG, uniforms: postUniforms
+});
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
+
+// ── ANIMATION ─────────────────────────────────────────────────────────────────
+
+let t = 0, glitch = 0, camTheta = 0, camPhi = 0.3, camR = 5;
+let camTargetR = 5, camShake = 0;
+let explodeQueue = false;
+
+const bgColor = new THREE.Color(0, 0, 0);
+
+function explodeParticles(strength) {
+  for (let i = 0; i < PC; i++) {
+    const i3 = i * 3;
+    const px = pPos[i3], py = pPos[i3+1], pz = pPos[i3+2];
+    const len = Math.sqrt(px*px + py*py + pz*pz) || 1;
+    const f = (6 + strength * 12) * (0.7 + Math.random() * 0.6);
+    pVel[i3]   += (px / len) * f;
+    pVel[i3+1] += (py / len) * f;
+    pVel[i3+2] += (pz / len) * f * 0.3;
+  }
+}
+
+function updateParticles(dt) {
+  const bass = A.bass, mid = A.mid;
+  for (let i = 0; i < PC; i++) {
+    const i3 = i * 3;
+    let px = pPos[i3], py = pPos[i3+1], pz = pPos[i3+2];
+    let vx = pVel[i3], vy = pVel[i3+1], vz = pVel[i3+2];
+
+    const rx = px, ry = py;
+    const rLen = Math.sqrt(rx*rx + ry*ry) || 0.001;
+
+    // Orbit tangent force
+    const os = (0.6 + mid * 1.8) * dt;
+    vx += (-ry / rLen) * os;
+    vy += ( rx / rLen) * os;
+
+    // Radial correction
+    const dist = Math.sqrt(px*px + py*py + pz*pz);
+    const target = pOrb[i] + bass * 0.8;
+    const rf = (target - dist) * 1.5 * dt;
+    vx += (px / (dist || 1)) * rf;
+    vy += (py / (dist || 1)) * rf;
+
+    // Z spring to plane
+    vz += -pz * 2.0 * dt;
+
+    // Integrate
+    px += vx * dt * 60;
+    py += vy * dt * 60;
+    pz += vz * dt * 60;
+
+    // Damping
+    const damp = 0.965;
+    vx *= damp; vy *= damp; vz *= damp;
+
+    // Reset if escaped
+    const d2 = px*px + py*py + pz*pz;
+    if (d2 > 400) { resetParticle(i); continue; }
+
+    pPos[i3] = px; pPos[i3+1] = py; pPos[i3+2] = pz;
+    pVel[i3] = vx; pVel[i3+1] = vy; pVel[i3+2] = vz;
+
+    // Color update
+    const spd = Math.sqrt(vx*vx + vy*vy + vz*vz);
+    const h = (A.hue + spd * 0.1 + i * 0.00083) % 1;
+    const [rr,gg,bb] = hsv2rgb(h, 0.85, 1.0);
+    pCol[i3] = rr; pCol[i3+1] = gg; pCol[i3+2] = bb;
+    pScl[i] = 0.4 + spd * 3.0 + A.high * 1.5;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.aColor.needsUpdate = true;
+  pGeo.attributes.aScale.needsUpdate = true;
+}
+
+function updateTunnel(dt) {
+  const speed = 1 + A.bass * 14;
+  for (let i = 0; i < TC; i++) {
+    const i3 = i * 3;
+    tPos[i3+2] += tSpd[i] * speed * dt * 60;
+    if (tPos[i3+2] > 8) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 3 + Math.random() * 8;
+      tPos[i3]   = Math.cos(ang) * rad;
+      tPos[i3+1] = Math.sin(ang) * rad;
+      tPos[i3+2] = -80;
+      tSpd[i] = 0.08 + Math.random() * 0.12;
+      const h = (A.hue + Math.random() * 0.3) % 1;
+      const [rr,gg,bb] = hsv2rgb(h, 0.7, 0.9);
+      tCol[i3] = rr; tCol[i3+1] = gg; tCol[i3+2] = bb;
+    }
+  }
+  tGeo.attributes.position.needsUpdate = true;
+  tGeo.attributes.aColor.needsUpdate = true;
+}
+
+let lastTime = 0;
+
+function animate(timestamp) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+  t += dt;
+
+  tickAudio();
+
+  if (A.beat && hasAudio) {
+    explodeParticles(A.beatStrength);
+    glitch = 1.0;
+    camShake = 0.18 + A.beatStrength * 0.25;
+    camTargetR = 5.5 + A.beatStrength * 1.5;
+  }
+
+  glitch   = Math.max(0, glitch - dt * 5);
+  camShake = Math.max(0, camShake - dt * 4);
+  camTargetR += (5 - camTargetR) * dt * 2.5;
+  camR = camTargetR;
+
+  updateParticles(dt);
+  updateTunnel(dt);
+
+  // Camera orbit + shake
+  camTheta += dt * (0.12 + A.mid * 0.15);
+  camPhi = 0.3 + Math.sin(t * 0.18) * 0.2 + A.bass * 0.15;
+  const shk = camShake * 0.06;
+  camera.position.set(
+    Math.sin(camTheta) * Math.cos(camPhi) * camR + (Math.random() - .5) * shk,
+    Math.sin(camPhi) * camR + (Math.random() - .5) * shk,
+    Math.cos(camTheta) * Math.cos(camPhi) * camR + (Math.random() - .5) * shk
+  );
+  camera.lookAt(0, 0, 0);
+
+  // Geometry animation
+  const bassS = 1 + A.bass * 0.6;
+  ico.scale.setScalar(bassS);
+  core.scale.setScalar(0.5 + A.bass * 0.35);
+  tk.rotation.x = t * 0.18;
+  tk.rotation.y = t * 0.11;
+  tk.scale.setScalar(1 + A.mid * 0.25);
+
+  // Update uniforms
+  const u = { uTime: t, uBass: A.bass, uMid: A.mid, uHigh: A.high, uHue: A.hue };
+  for (const [k, v] of Object.entries(u)) {
+    icoUniforms[k].value  = v;
+    coreUniforms[k].value = v;
+    tkUniforms[k].value   = k === 'uHue' ? (A.hue + 0.5) % 1 : v;
+  }
+
+  // Background
+  const bgH = (A.hue + 0.6) % 1;
+  bgColor.setHSL(bgH, 0.4, 0.02 + A.mid * 0.06);
+  renderer.setClearColor(bgColor, 1);
+
+  // Post uniforms
+  postUniforms.uTime.value   = t;
+  postUniforms.uBass.value   = A.bass;
+  postUniforms.uGlitch.value = glitch;
+  postUniforms.uSeg.value    = 6 + Math.floor(A.mid * 6) * 2;
+
+  // Render scene → RT → post → screen
+  renderer.setRenderTarget(RT);
+  renderer.clear();
+  renderer.render(scene, camera);
+
+  renderer.setRenderTarget(null);
+  renderer.clear();
+  renderer.render(postScene, postCam);
+}
+
+requestAnimationFrame(animate);
+
+// ── UI EVENTS ─────────────────────────────────────────────────────────────────
+
+const dropzone  = document.getElementById('dropzone');
+const card      = document.getElementById('card');
+const fileIn    = document.getElementById('file-input');
+const urlInput  = document.getElementById('url-input');
+const searchIn  = document.getElementById('search-input');
+
+// Search
+document.getElementById('search-btn').addEventListener('click', e => { e.stopPropagation(); doSearch(); });
+searchIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.stopPropagation(); doSearch(); } });
+searchIn.addEventListener('click', e => e.stopPropagation());
+
+// Demo / file
+document.getElementById('demo-btn').addEventListener('click', e => { e.stopPropagation(); startDemo(); });
+document.getElementById('file-btn').addEventListener('click', e => { e.stopPropagation(); fileIn.click(); });
+
+// URL
+document.getElementById('url-go').addEventListener('click', e => { e.stopPropagation(); loadUrl(urlInput.value); });
+urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.stopPropagation(); loadUrl(urlInput.value); } });
+urlInput.addEventListener('click', e => e.stopPropagation());
+
+// Card clicks don't bubble to file picker — explicit buttons handle everything
+card.addEventListener('click', e => e.stopPropagation());
+
+fileIn.addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+document.body.addEventListener('dragover', e => {
+  e.preventDefault();
+  if (!hasAudio) card.classList.add('drag');
+});
+document.body.addEventListener('dragleave', () => card.classList.remove('drag'));
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  card.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('audio/')) loadFile(f);
+});
+
+document.getElementById('pill-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  togglePlay();
+});
+
+canvas.addEventListener('click', () => { if (hasAudio) togglePlay(); });
+canvas.addEventListener('touchend', e => { e.preventDefault(); if (hasAudio) togglePlay(); });
+
+window.addEventListener('resize', () => {
+  W = window.innerWidth; H = window.innerHeight;
+  renderer.setSize(W, H);
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  RT.dispose();
+  RT = new THREE.WebGLRenderTarget(W, H, {
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat
+  });
+  postUniforms.tDiffuse.value = RT.texture;
+  postUniforms.uRes.value.set(W, H);
+});
+</script>
+</body>
+</html>
